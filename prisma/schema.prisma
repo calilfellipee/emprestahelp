@@ -1,0 +1,203 @@
+// EmprestaFácil - Prisma Schema para PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(uuid()) @db.Uuid
+  email            String   @unique
+  name             String
+  password         String
+  plan             String   @default("free")
+  isAdmin          Boolean  @default(false) @map("is_admin")
+  companyName      String?  @map("company_name")
+  companyCnpj      String?  @map("company_cnpj")
+  companyAddress   String?  @map("company_address")
+  whatsappApiToken String?  @map("whatsapp_api_token")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relacionamentos
+  clients        Client[]
+  loans          Loan[]
+  payments       Payment[]
+  notifications  Notification[]
+  systemSettings SystemSetting[] // ADICIONADO: Relação com as configurações
+  
+  @@map("users")
+}
+
+model Client {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  name         String
+  cpf          String?  @unique
+  rg           String?
+  phone        String
+  whatsapp     String?
+  email        String?
+  address      String
+  city         String?
+  state        String?
+  zipCode      String?  @map("zip_code")
+  observations String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relacionamentos
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loans         Loan[]
+  notifications Notification[]
+  documents     ClientDocument[]
+
+  @@map("clients")
+}
+
+model Loan {
+  id                    String    @id @default(uuid()) @db.Uuid
+  clientId              String    @map("client_id") @db.Uuid
+  loanNumber            Int       @map("loan_number") // NOVO: Número sequencial do empréstimo
+  userId                String    @map("user_id") @db.Uuid
+  type                  String    @default("loan")
+  amount                Decimal   @db.Decimal(10, 2)
+  interestRate          Decimal   @map("interest_rate") @db.Decimal(5, 2)
+  loanDate              DateTime  @map("loan_date") @db.Date
+  dueDate               DateTime  @map("due_date") @db.Date
+  installments          Int       @default(1)
+  installmentAmount     Decimal   @map("installment_amount") @db.Decimal(10, 2)
+  totalAmount           Decimal   @map("total_amount") @db.Decimal(10, 2)
+  status                String    @default("active")
+  dailyInterestRate     Decimal   @default(0.1) @map("daily_interest_rate") @db.Decimal(5, 2)
+  lateFeePercentage     Decimal   @default(2.0) @map("late_fee_percentage") @db.Decimal(5, 2)
+  collateralDescription String?   @map("collateral_description")
+  collateralValue       Decimal?  @map("collateral_value") @db.Decimal(10, 2)
+  notes                 String?
+  contractGenerated     Boolean   @default(false) @map("contract_generated")
+  contractUrl           String?   @map("contract_url")
+  contractSignedAt      DateTime? @map("contract_signed_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relacionamentos
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments      Payment[]
+  notifications Notification[]
+  documents     LoanDocument[]
+
+  @@index([userId, loanNumber]) 
+  @@map("loans")
+}
+
+model Payment {
+  id                String   @id @default(uuid()) @db.Uuid
+  loanId            String   @map("loan_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  amount            Decimal  @db.Decimal(10, 2)
+  paymentDate       DateTime @default(now()) @map("payment_date")
+  installmentNumber Int      @default(1) @map("installment_number")
+  lateFee           Decimal  @default(0) @map("late_fee") @db.Decimal(10, 2)
+  dailyInterest     Decimal  @default(0) @map("daily_interest") @db.Decimal(10, 2)
+  paymentMethod     String?  @map("payment_method")
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relacionamentos
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Notification {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  clientId         String?  @map("client_id") @db.Uuid
+  loanId           String?  @map("loan_id") @db.Uuid
+  type             String
+  channel          String?
+  title            String
+  message          String
+  recipientPhone   String?  @map("recipient_phone")
+  recipientEmail   String?  @map("recipient_email")
+  status           String   @default("pending")
+  sentAt           DateTime? @map("sent_at")
+  deliveredAt      DateTime? @map("delivered_at")
+  readAt           DateTime? @map("read_at")
+  failedAt         DateTime? @map("failed_at")
+  errorMessage     String?  @map("error_message")
+  providerId       String?  @map("provider_id")
+  providerResponse Json?    @map("provider_response")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relacionamentos
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  loan   Loan?   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model ClientDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  type         String
+  name         String
+  originalName String   @map("original_name")
+  mimeType     String?  @map("mime_type")
+  size         BigInt
+  url          String
+  storagePath  String?  @map("storage_path")
+  metadata     Json     @default("{}")
+  uploadedBy   String?  @map("uploaded_by") @db.Uuid
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  // Relacionamentos
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_documents")
+}
+
+model LoanDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  loanId       String   @map("loan_id") @db.Uuid
+  type         String
+  name         String
+  originalName String   @map("original_name")
+  mimeType     String?  @map("mime_type")
+  size         BigInt
+  url          String
+  storagePath  String?  @map("storage_path")
+  metadata     Json     @default("{}")
+  uploadedBy   String?  @map("uploaded_by") @db.Uuid
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  // Relacionamentos
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@map("loan_documents")
+}
+
+
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String
+  value       Json
+  description String?
+  isPublic    Boolean  @default(false) @map("is_public")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // --- CORREÇÃO APLICADA ---
+  userId      String   @map("user_id") @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key]) // Garante que cada usuário só tenha uma chave de cada tipo
+  @@map("system_settings")
+}
